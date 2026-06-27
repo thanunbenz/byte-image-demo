@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Generated output
+output.png
+
+# OS files
+.DS_Store
+
+# Editor / tooling
+.vscode/
+.idea/
+.claude-flow/
