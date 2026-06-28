@@ -21,25 +21,34 @@ The QR app needs a camera on the receiver side. Browsers only allow the camera o
 
 ## How the QR transfer works
 
+The file is sent as **raw bytes** (no base64) using an **LT fountain code**, so frame order does not matter and lost frames never need to be re-shown.
+
 | Step | Sender | Receiver |
 |------|--------|----------|
 | 1 | Pick a file | Open camera |
-| 2 | File is base64-encoded, then the string is split into chunks | Scan QR frames continuously |
-| 3 | Each chunk becomes one QR frame; frames cycle on screen | Collect frames until all are received |
-| 4 | — | Reassemble chunks, decode, download the byte-identical file |
+| 2 | Split into K blocks of B bytes | Scan QR frames continuously |
+| 3 | Emit fountain symbols (XOR of random blocks) as QR frames, cycling forever | Decode symbols by peeling as they arrive |
+| 4 | — | Once enough symbols arrive (~K + 5-20%), reassemble and download |
 
-### Frame format (text inside each QR)
+### Why it is fast
+
+- **Raw bytes in QR Byte mode** — no base64, ~33% less data than text encoding.
+- **Fountain code** — each frame is a random XOR of blocks keyed by a 4-byte seed; the receiver finishes after any sufficient set of frames, with no waiting for a specific missing frame to loop back.
+- **Web Worker decode** — jsQR runs off the main thread, paced by `requestVideoFrameCallback`, so capture is not throttled by rendering.
+- **EC level L** — maximum QR capacity; the fountain code already tolerates losses.
+
+### Frame format (raw bytes inside each QR)
 
 ```text
-Meta:  M | <id> | <total> | <encodedFilename> | <mime> | <size>
-Data:  D | <id> | <index> | <total> | <base64Chunk>
+Meta:  [1][id:4][fileLen:u32][B:u16][mimeLen:1][mime][nameLen:1][name]
+Data:  [2][id:4][seed:u32][payload:B]
 ```
 
-Fields are joined by `|`. Base64 contains no `|`, so splitting is safe. The file is base64-encoded as one string before chunking, so the receiver just concatenates chunks in order and decodes once.
+K (block count) is derived as `ceil(fileLen / B)` on both sides. The data payload is one fountain symbol; the receiver regenerates the block set from `seed`.
 
 ### Tuning
 
-- **Chars per frame** — smaller frames scan easier but need more frames.
+- **Bytes per frame (B)** — smaller frames scan easier but need more frames.
 - **Speed (frames/sec)** — lower speed is easier to capture in poor lighting.
 
 ## Byte demo functions
