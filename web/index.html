@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>ส่งไฟล์ผ่าน QR (ไม่ใช้เน็ต)</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1e26;
+    --panel2: #232936;
+    --line: #2e3440;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #4c8bf5;
+    --accent2: #34d399;
+    --danger: #f87171;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", system-ui, "Noto Sans Thai", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 24px 18px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .hidden { display: none !important; }
+
+  .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .role-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 28px 18px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s;
+  }
+  .role-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .role-card .icon { font-size: 40px; line-height: 1; margin-bottom: 12px; }
+  .role-card .title { font-size: 17px; font-weight: 600; }
+  .role-card .desc { color: var(--muted); font-size: 13px; margin-top: 6px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .row + .row { margin-top: 14px; }
+  label.field { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+
+  button {
+    font: inherit;
+    border: none;
+    border-radius: 10px;
+    padding: 11px 18px;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity .15s, background .15s;
+  }
+  button:hover { opacity: .9; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost { background: var(--panel2); color: var(--text); }
+  button.danger { background: var(--danger); }
+  button.small { padding: 7px 12px; font-size: 13px; }
+
+  input[type=file] { color: var(--muted); font-size: 14px; }
+  input[type=range] { width: 180px; accent-color: var(--accent); }
+
+  .qr-stage {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 320px;
+  }
+  #qrCanvas, #scanCanvas { image-rendering: pixelated; max-width: 100%; height: auto; }
+  video { width: 100%; border-radius: 12px; background: #000; max-height: 420px; }
+
+  .stat { font-size: 13px; color: var(--muted); }
+  .stat b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .bar { height: 10px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .2s; }
+
+  .grid-frames { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 12px; }
+  .cell { width: 9px; height: 9px; border-radius: 2px; background: var(--panel2); }
+  .cell.on { background: var(--accent2); }
+
+  .back { background: none; color: var(--muted); padding: 6px 0; font-weight: 500; }
+  .back:hover { color: var(--text); }
+  .note { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .preview img { max-width: 100%; border-radius: 10px; margin-top: 12px; }
+  a.dl { display: inline-block; text-decoration: none; }
+  .pill { font-size: 12px; background: var(--panel2); padding: 4px 10px; border-radius: 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== หน้าเลือกบทบาท ===== -->
+  <section id="home">
+    <h1>ส่งไฟล์ผ่าน QR Code</h1>
+    <p class="sub">ส่งไฟล์ข้ามเครื่องโดยไม่ต้องใช้อินเทอร์เน็ต — เครื่องส่งฉาย QR เครื่องรับเปิดกล้องสแกน</p>
+    <div class="roles">
+      <div class="role-card" onclick="showSender()">
+        <div class="icon">&#128228;</div>
+        <div class="title">ผู้ส่ง</div>
+        <div class="desc">เลือกไฟล์ แล้วฉาย QR</div>
+      </div>
+      <div class="role-card" onclick="showReceiver()">
+        <div class="icon">&#128229;</div>
+        <div class="title">ผู้รับ</div>
+        <div class="desc">เปิดกล้องสแกน QR</div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:24px">
+      หมายเหตุ: ฝั่งผู้รับต้องใช้กล้อง ซึ่งเบราว์เซอร์อนุญาตเฉพาะหน้าเว็บที่เปิดผ่าน
+      <span class="pill">localhost</span> หรือ <span class="pill">https</span>
+      ดังนั้นแนะนำให้รันผ่านเซิร์ฟเวอร์ในเครื่อง: <code>node web/serve.js</code>
+    </p>
+  </section>
+
+  <!-- ===== ผู้ส่ง ===== -->
+  <section id="sender" class="hidden">
+    <button class="back" onclick="goHome()">&#8592; กลับ</button>
+    <h1>ผู้ส่ง</h1>
+    <p class="sub">เลือกไฟล์ ระบบจะซอยเป็นหลายเฟรมแล้วฉายวนเป็น QR</p>
+
+    <div class="panel">
+      <div class="row">
+        <input type="file" id="fileInput" />
+      </div>
+      <div class="row" id="sendOpts">
+        <div>
+          <label class="field">ขนาดต่อเฟรม: <b id="chunkLbl">800</b> ตัวอักษร</label>
+          <input type="range" id="chunkSize" min="200" max="1600" step="100" value="800" />
+        </div>
+        <div>
+          <label class="field">ความเร็ว: <b id="speedLbl">6</b> เฟรม/วิ</label>
+          <input type="range" id="speed" min="1" max="15" step="1" value="6" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="startSend" disabled onclick="startSending()">เริ่มฉาย QR</button>
+        <button id="stopSend" class="ghost hidden" onclick="stopSending()">หยุด</button>
+      </div>
+    </div>
+
+    <div id="sendArea" class="hidden">
+      <div class="qr-stage"><canvas id="qrCanvas"></canvas></div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="stat">ไฟล์: <b id="sFileName">-</b></span>
+          <span class="stat">เฟรม <b id="sFrameNow">0</b> / <b id="sFrameTotal">0</b></span>
+        </div>
+        <p class="note" style="margin-top:10px">ให้ผู้รับเล็งกล้องที่ QR ค้างไว้จนกว่าจะครบทุกเฟรม (มี 1 เฟรมข้อมูลไฟล์ + เฟรมข้อมูล) ถ้าสแกนยากให้ลดขนาดต่อเฟรมหรือลดความเร็ว</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ผู้รับ ===== -->
+  <section id="receiver" class="hidden">
+    <button class="back" onclick="goHome()">&#8592; กลับ</button>
+    <h1>ผู้รับ</h1>
+    <p class="sub">เปิดกล้องเล็งไปที่ QR ของผู้ส่ง ระบบจะเก็บเฟรมจนครบแล้วประกอบไฟล์</p>
+
+    <div class="panel">
+      <div class="row">
+        <button id="startCam" onclick="startCamera()">เปิดกล้อง</button>
+        <button id="stopCam" class="ghost hidden" onclick="stopCamera()">ปิดกล้อง</button>
+        <button id="resetRecv" class="ghost small hidden" onclick="resetReceive()">เริ่มรับใหม่</button>
+      </div>
+    </div>
+
+    <div id="recvArea" class="hidden">
+      <video id="video" playsinline></video>
+      <canvas id="scanCanvas" class="hidden"></canvas>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="stat">ไฟล์: <b id="rFileName">รอข้อมูล...</b></span>
+          <span class="stat">รับแล้ว <b id="rCount">0</b> / <b id="rTotal">?</b></span>
+        </div>
+        <div class="bar" style="margin-top:12px"><span id="rBar"></span></div>
+        <div class="grid-frames" id="rGrid"></div>
+      </div>
+
+      <div id="doneArea" class="panel hidden">
+        <div class="row" style="justify-content:space-between">
+          <span class="stat" style="color:var(--accent2)"><b>รับครบแล้ว!</b> พร้อมบันทึก</span>
+          <a class="dl" id="dlLink"><button>บันทึกไฟล์</button></a>
+        </div>
+        <div class="preview" id="preview"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/jsQR.js"></script>
+<script>
+/* ============================================================
+   โปรโตคอลเฟรม (ข้อความใน QR แต่ละอัน)
+   เฟรมข้อมูลไฟล์ (meta):  M|<id>|<total>|<ชื่อไฟล์ encode>|<mime>|<size>
+   เฟรมข้อมูล (data):       D|<id>|<idx>|<total>|<base64 ส่วนย่อย>
+   * base64 ไม่มีอักขระ "|" จึง split ปลอดภัย
+   * ตัวไฟล์ถูก encode เป็น base64 ทั้งก้อนก่อน แล้วค่อยซอย "สตริง"
+     ทำให้ฝั่งรับแค่ต่อสตริงตามลำดับแล้ว decode ครั้งเดียว
+   ============================================================ */
+
+// ---------- ตัวช่วยสลับหน้า ----------
+const $ = (id) => document.getElementById(id);
+function goHome() { stopSending(); stopCamera(); show('home'); }
+function show(id) { ['home','sender','receiver'].forEach(s => $(s).classList.toggle('hidden', s !== id)); }
+function showSender() { show('sender'); }
+function showReceiver() { show('receiver'); }
+
+// ============================================================
+//  ผู้ส่ง
+// ============================================================
+let sendState = null;   // { frames, total, timer, i }
+
+$('chunkSize').addEventListener('input', e => $('chunkLbl').textContent = e.target.value);
+$('speed').addEventListener('input', e => $('speedLbl').textContent = e.target.value);
+$('fileInput').addEventListener('change', () => {
+  $('startSend').disabled = !$('fileInput').files.length;
+});
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(bin);
+}
+
+async function startSending() {
+  const file = $('fileInput').files[0];
+  if (!file) return;
+
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const b64 = bytesToBase64(buf);
+  const charsPerChunk = parseInt($('chunkSize').value, 10);
+  const id = Math.random().toString(36).slice(2, 8);
+  const mime = file.type || 'application/octet-stream';
+
+  // ซอย "สตริง base64" เป็นชิ้น ๆ
+  const chunks = [];
+  for (let i = 0; i < b64.length; i += charsPerChunk) chunks.push(b64.slice(i, i + charsPerChunk));
+  const total = chunks.length;
+
+  const frames = [];
+  frames.push(`M|${id}|${total}|${encodeURIComponent(file.name)}|${mime}|${file.size}`);
+  for (let i = 0; i < total; i++) frames.push(`D|${id}|${i}|${total}|${chunks[i]}`);
+
+  sendState = { frames, total, i: 0, timer: null };
+
+  $('sFileName').textContent = `${file.name} (${formatSize(file.size)})`;
+  $('sFrameTotal').textContent = total;
+  $('sendArea').classList.remove('hidden');
+  $('startSend').classList.add('hidden');
+  $('stopSend').classList.remove('hidden');
+  $('sendOpts').style.opacity = .4;
+  document.querySelectorAll('#sendOpts input').forEach(el => el.disabled = true);
+
+  const interval = Math.round(1000 / parseInt($('speed').value, 10));
+  let idx = 0;
+  function tick() {
+    const frame = sendState.frames[idx % sendState.frames.length];
+    drawQR($('qrCanvas'), frame);
+    // แสดงหมายเลขเฟรมข้อมูล (ข้าม meta)
+    const dataIdx = (idx % sendState.frames.length);
+    $('sFrameNow').textContent = dataIdx === 0 ? 'meta' : dataIdx;
+    idx++;
+  }
+  tick();
+  sendState.timer = setInterval(tick, interval);
+}
+
+function stopSending() {
+  if (sendState && sendState.timer) clearInterval(sendState.timer);
+  sendState = null;
+  $('sendArea').classList.add('hidden');
+  $('startSend').classList.remove('hidden');
+  $('stopSend').classList.add('hidden');
+  $('sendOpts').style && ($('sendOpts').style.opacity = 1);
+  document.querySelectorAll('#sendOpts input').forEach(el => el.disabled = false);
+}
+
+// วาด QR ลง canvas เอง (คมชัด สแกนง่าย)
+function drawQR(canvas, text) {
+  let qr;
+  try {
+    qr = qrcode(0, 'M');        // 0 = auto version, ระดับแก้ความผิดพลาด M
+    qr.addData(text, 'Byte');
+    qr.make();
+  } catch (e) {
+    // ข้อมูลใหญ่เกิน QR เดียว -> เตือนให้ลดขนาดต่อเฟรม
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.height = 300;
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,300,300);
+    ctx.fillStyle = '#c00'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('ข้อมูลต่อเฟรมใหญ่เกินไป', 150, 140);
+    ctx.fillText('ลดขนาดต่อเฟรมลง', 150, 165);
+    return;
+  }
+  const count = qr.getModuleCount();
+  const quiet = 4;                       // ขอบขาว
+  const dim = count + quiet * 2;
+  const scale = Math.max(2, Math.floor(512 / dim));
+  const px = dim * scale;
+  canvas.width = canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, px, px);
+  ctx.fillStyle = '#000';
+  for (let r = 0; r < count; r++) {
+    for (let c = 0; c < count; c++) {
+      if (qr.isDark(r, c)) {
+        ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+      }
+    }
+  }
+}
+
+// ============================================================
+//  ผู้รับ
+// ============================================================
+let recv = null;          // สถานะการรับ
+let stream = null, rafId = null;
+
+function freshRecv() {
+  return { id: null, total: 0, chunks: {}, count: 0, filename: null, mime: null, size: 0, done: false };
+}
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+  } catch (e) {
+    alert('เปิดกล้องไม่สำเร็จ: ' + e.message + '\nต้องเปิดหน้านี้ผ่าน localhost หรือ https');
+    return;
+  }
+  const video = $('video');
+  video.srcObject = stream;
+  await video.play();
+
+  if (!recv) recv = freshRecv();
+  $('recvArea').classList.remove('hidden');
+  $('startCam').classList.add('hidden');
+  $('stopCam').classList.remove('hidden');
+  $('resetRecv').classList.remove('hidden');
+  scanLoop();
+}
+
+function stopCamera() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $('startCam').classList.remove('hidden');
+  $('stopCam').classList.add('hidden');
+}
+
+function resetReceive() {
+  recv = freshRecv();
+  $('rGrid').innerHTML = '';
+  $('rFileName').textContent = 'รอข้อมูล...';
+  $('rCount').textContent = '0';
+  $('rTotal').textContent = '?';
+  $('rBar').style.width = '0%';
+  $('doneArea').classList.add('hidden');
+  $('preview').innerHTML = '';
+}
+
+function scanLoop() {
+  const video = $('video');
+  const canvas = $('scanCanvas');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+    if (code && code.data) handleFrame(code.data);
+  }
+  rafId = requestAnimationFrame(scanLoop);
+}
+
+function handleFrame(str) {
+  const parts = str.split('|');
+  const type = parts[0];
+  if (type !== 'M' && type !== 'D') return;     // ไม่ใช่เฟรมของเรา
+  const id = parts[1];
+
+  // เจอ transfer ใหม่ -> เริ่มเก็บใหม่
+  if (recv.id && recv.id !== id) resetReceive();
+  recv.id = id;
+
+  if (type === 'M') {
+    recv.total = parseInt(parts[2], 10);
+    recv.filename = decodeURIComponent(parts[3] || 'received.bin');
+    recv.mime = parts[4] || 'application/octet-stream';
+    recv.size = parseInt(parts[5], 10) || 0;
+    $('rFileName').textContent = `${recv.filename} (${formatSize(recv.size)})`;
+  } else {
+    const idx = parseInt(parts[2], 10);
+    recv.total = parseInt(parts[3], 10);
+    const data = parts[4];
+    if (recv.chunks[idx] === undefined) {
+      recv.chunks[idx] = data;
+      recv.count++;
+    }
+  }
+
+  ensureGrid(recv.total);
+  $('rTotal').textContent = recv.total || '?';
+  $('rCount').textContent = recv.count;
+  if (recv.total > 0) {
+    $('rBar').style.width = Math.round(recv.count / recv.total * 100) + '%';
+    markGrid();
+    if (recv.count === recv.total && !recv.done) assemble();
+  }
+}
+
+function ensureGrid(total) {
+  const grid = $('rGrid');
+  if (!total || grid.childElementCount === total) return;
+  grid.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    grid.appendChild(d);
+  }
+}
+function markGrid() {
+  const cells = $('rGrid').children;
+  for (let i = 0; i < cells.length; i++) {
+    if (recv.chunks[i] !== undefined) cells[i].classList.add('on');
+  }
+}
+
+function assemble() {
+  recv.done = true;
+  let b64 = '';
+  for (let i = 0; i < recv.total; i++) b64 += recv.chunks[i];
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: recv.mime || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+
+  const link = $('dlLink');
+  link.href = url;
+  link.download = recv.filename || 'received.bin';
+
+  $('doneArea').classList.remove('hidden');
+  const prev = $('preview');
+  prev.innerHTML = '';
+  if ((recv.mime || '').startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = url;
+    prev.appendChild(img);
+  }
+  // ปิดกล้องอัตโนมัติเมื่อรับครบ
+  stopCamera();
+}
+
+// ---------- ตัวช่วยทั่วไป ----------
+function formatSize(n) {
+  if (!n) return '0 B';
+  const u = ['B','KB','MB','GB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+</script>
+</body>
+</html>
